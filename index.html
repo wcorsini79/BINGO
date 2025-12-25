@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bingo Digital - Jogo Online em Tempo Real</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="https://unpkg.com/confetti-js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto+Slab:wght@400;700&display=swap');
+        
+        :root {
+            --primary: #4f46e5;
+            --secondary: #7c3aed;
+            --accent: #f59e0b;
+            --danger: #ef4444;
+            --success: #10b981;
+            --dark: #1f2937;
+            --light: #f9fafb;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: var(--dark);
+        }
+        
+        .bingo-font {
+            font-family: 'Roboto Slab', serif;
+        }
+        
+        .glass {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .ball {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s;
+        }
+        
+        .ball:hover {
+            transform: scale(1.1);
+        }
+        
+        .bingo-cell {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .bingo-cell:hover {
+            transform: translateY(-2px);
+        }
+        
+        .bingo-cell.marked {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.4);
+        }
+        
+        .bingo-cell.free {
+            background: linear-gradient(135deg, #10b981, #34d399);
+            color: white;
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .bounce {
+            animation: bounce 0.5s;
+        }
+        
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
+            40% {transform: translateY(-10px);}
+            60% {transform: translateY(-5px);}
+        }
+        
+        .confetti {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        .qr-code-container {
+            padding: 20px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .letter-header {
+            font-size: 2rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .player-card {
+            transition: all 0.3s;
+            border-left: 4px solid transparent;
+        }
+        
+        .player-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            border-left-color: var(--primary);
+        }
+        
+        .number-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 8px;
+        }
+        
+        .number-item {
+            padding: 8px;
+            text-align: center;
+            background: #f3f4f6;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+        
+        .number-item.called {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            transform: scale(1.05);
+        }
+        
+        .number-item.current {
+            background: linear-gradient(135deg, var(--accent), #fbbf24);
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .winner-banner {
+            background: linear-gradient(90deg, #f59e0b, #fbbf24, #f59e0b);
+            background-size: 200% 200%;
+            animation: gradientShift 2s ease infinite;
+        }
+        
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        .tie-breaker-wheel {
+            animation: spin 3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(720deg); }
+        }
+        
+        /* Responsividade */
+        @media (max-width: 768px) {
+            .ball {
+                width: 50px;
+                height: 50px;
+                font-size: 1.2rem;
+            }
+            
+            .bingo-cell {
+                width: 45px;
+                height: 45px;
+                font-size: 0.9rem;
+            }
+            
+            .number-grid {
+                grid-template-columns: repeat(8, 1fr);
+                gap: 6px;
+            }
+            
+            .letter-header {
+                font-size: 1.5rem;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .bingo-cell {
+                width: 35px;
+                height: 35px;
+                font-size: 0.8rem;
+            }
+            
+            .number-grid {
+                grid-template-columns: repeat(6, 1fr);
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+    <!-- Container Principal -->
+    <div id="app" class="flex-1">
+        <!-- Tela Inicial (Landing) -->
+        <div id="landing-screen" class="min-h-screen flex flex-col items-center justify-center p-4">
+            <div class="glass rounded-3xl shadow-2xl p-8 md:p-12 max-w-4xl w-full">
+                <div class="text-center mb-10">
+                    <h1 class="text-5xl md:text-7xl font-bold bingo-font mb-4">
+                        <span class="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600">
+                            BINGO DIGITAL
+                        </span>
+                    </h1>
+                    <p class="text-xl text-gray-600">Jogo online em tempo real com WebSockets</p>
+                </div>
+                
+                <div class="grid md:grid-cols-2 gap-8 mb-10">
+                    <div class="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-2xl">
+                        <h2 class="text-2xl font-bold text-blue-700 mb-4 flex items-center">
+                            <i class="fas fa-crown mr-3"></i> Criar Sala (Admin)
+                        </h2>
+                        <p class="text-gray-700 mb-6">Crie uma sala personalizada, gere um QR Code e convide jogadores para uma partida emocionante!</p>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Nome da Sala</label>
+                                <input type="text" id="room-name" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ex: Bingo da Família">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Tipo de Jogo</label>
+                                <select id="game-type" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                    <option value="standard">Bingo Tradicional</option>
+                                    <option value="blackout">Cartela Cheia (Blackout)</option>
+                                    <option value="four-corners">Quatro Cantos</option>
+                                    <option value="letter-x">Letra X</option>
+                                </select>
+                            </div>
+                            <button onclick="createRoom()" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 transition-all transform hover:-translate-y-1">
+                                <i class="fas fa-plus-circle mr-2"></i> Criar Nova Sala
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl">
+                        <h2 class="text-2xl font-bold text-green-700 mb-4 flex items-center">
+                            <i class="fas fa-gamepad mr-3"></i> Entrar na Sala (Jogador)
+                        </h2>
+                        <p class="text-gray-700 mb-6">Entre em uma sala existente escaneando o QR Code ou digitando o código da sala.</p>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Código da Sala</label>
+                                <input type="text" id="room-code" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-transparent" placeholder="Digite o código de 6 letras">
+                            </div>
+                            <div class="flex space-x-2">
+                                <input type="text" id="player-firstname" class="flex-1 px-4 py-3 rounded-lg border border-gray-300" placeholder="Seu nome">
+                                <input type="text" id="player-lastname" class="flex-1 px-4 py-3 rounded-lg border border-gray-300" placeholder="Sobrenome">
+                            </div>
+                            <button onclick="joinRoom()" class="w-full bg-gradient-to-r from-green-600 to-teal-600 text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 transition-all transform hover:-translate-y-1">
+                                <i class="fas fa-sign-in-alt mr-2"></i> Entrar na Sala
+                            </button>
+                        </div>
+                        <div class="mt-6 p-4 bg-gray-100 rounded-lg">
+                            <p class="text-sm text-gray-600 mb-2">Ou escaneie o QR Code da sala:</p>
+                            <div class="flex items-center space-x-4">
+                                <div class="qr-code-container">
+                                    <div id="demo-qr" class="w-32 h-32"></div>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-600">Use a câmera do seu celular para escanear o código QR da sala</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="text-center text-gray-600">
+                    <p><i class="fas fa-bolt text-yellow-500 mr-2"></i> Jogo em tempo real com WebSockets</p>
+                    <p><i class="fas fa-mobile-alt text-blue-500 mr-2"></i> Totalmente responsivo para todos os dispositivos</p>
+                    <p><i class="fas fa-trophy text-purple-500 mr-2"></i> Sistema de desempate com roleta aleatória</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela do Administrador -->
+        <div id="admin-screen" class="min-h-screen hidden p-4">
+            <div class="max-w-7xl mx-auto">
+                <!-- Header Admin -->
+                <div class="glass rounded-2xl p-6 mb-6">
+                    <div class="flex flex-col md:flex-row justify-between items-center">
+                        <div>
+                            <h1 class="text-3xl font-bold text-gray-800 bingo-font">Painel do Administrador</h1>
+                            <p class="text-gray-600" id="admin-room-info">Sala: <span id="current-room-name"></span> | Código: <span id="current-room-code" class="font-mono font-bold"></span></p>
+                        </div>
+                        <div class="mt-4 md:mt-0">
+                            <button onclick="copyRoomLink()" class="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg mr-3">
+                                <i class="fas fa-link mr-2"></i> Copiar Link
+                            </button>
+                            <button onclick="endGame()" class="bg-red-100 text-red-700 px-4 py-2 rounded-lg">
+                                <i class="fas fa-stop-circle mr-2"></i> Encerrar Jogo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="grid lg:grid-cols-3 gap-6">
+                    <!-- Painel Esquerdo: Jogadores -->
+                    <div class="lg:col-span-1">
+                        <div class="glass rounded-2xl p-6 h-full">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center">
+                                <i class="fas fa-users mr-3"></i> Jogadores Conectados
+                                <span id="player-count" class="ml-2 bg-blue-500 text-white text-sm rounded-full w-8 h-8 flex items-center justify-center">0</span>
+                            </h2>
+                            
+                            <div id="players-list" class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                                <!-- Jogadores serão inseridos aqui dinamicamente -->
+                                <div class="text-center text-gray-500 py-8">
+                                    <i class="fas fa-user-friends text-4xl mb-3"></i>
+                                    <p>Aguardando jogadores...</p>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-6">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="font-bold text-gray-700">QR Code da Sala</h3>
+                                    <button onclick="refreshQR()" class="text-blue-600">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                </div>
+                                <div id="qr-code-admin" class="flex justify-center">
+                                    <!-- QR Code será gerado aqui -->
+                                </div>
+                                <p class="text-center text-sm text-gray-600 mt-2">Compartilhe este código para entrar na sala</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Painel Central: Controles do Jogo -->
+                    <div class="lg:col-span-2">
+                        <div class="glass rounded-2xl p-6 mb-6">
+                            <div class="flex flex-wrap items-center justify-between mb-6">
+                                <div>
+                                    <h2 class="text-2xl font-bold text-gray-800">Controle da Partida</h2>
+                                    <p id="game-status" class="text-gray-600">Status: <span class="font-bold text-yellow-600">Aguardando jogadores</span></p>
+                                </div>
+                                
+                                <div class="flex space-x-3 mt-4 md:mt-0">
+                                    <button id="start-game-btn" onclick="startGame()" class="bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <i class="fas fa-play mr-2"></i> Iniciar Jogo
+                                    </button>
+                                    <button id="next-ball-btn" onclick="drawNextBall()" class="bg-gradient-to-r from-purple-500 to-pink-600 text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed hidden">
+                                        <i class="fas fa-dice mr-2"></i> Próxima Bola
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Bola Atual -->
+                            <div class="mb-8">
+                                <h3 class="text-xl font-bold text-gray-700 mb-4">Bola Atual</h3>
+                                <div class="flex justify-center">
+                                    <div id="current-ball" class="ball bg-gradient-to-br from-yellow-400 to-orange-500 text-white text-3xl">
+                                        --
+                                    </div>
+                                </div>
+                                <p class="text-center text-gray-600 mt-2">Última bola sorteada aparecerá aqui</p>
+                            </div>
+                            
+                            <!-- Grid de Números Sorteados -->
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-700 mb-4">Números Sorteados</h3>
+                                <div id="drawn-numbers" class="number-grid">
+                                    <!-- Números sorteados serão inseridos aqui -->
+                                </div>
+                                <p class="text-right text-gray-600 mt-2">Total: <span id="total-drawn">0</span>/75</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Cartela de Exemplo -->
+                        <div class="glass rounded-2xl p-6">
+                            <h3 class="text-xl font-bold text-gray-700 mb-4">Cartela de Exemplo</h3>
+                            <div class="overflow-x-auto">
+                                <table class="bingo-table mx-auto">
+                                    <thead>
+                                        <tr>
+                                            <th class="letter-header p-3">B</th>
+                                            <th class="letter-header p-3">I</th>
+                                            <th class="letter-header p-3">N</th>
+                                            <th class="letter-header p-3">G</th>
+                                            <th class="letter-header p-3">O</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sample-card">
+                                        <!-- Cartela de exemplo será gerada aqui -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela do Jogador -->
+        <div id="player-screen" class="min-h-screen hidden p-4">
+            <div class="max-w-6xl mx-auto">
+                <!-- Header Jogador -->
+                <div class="glass rounded-2xl p-6 mb-6">
+                    <div class="flex flex-col md:flex-row justify-between items-center">
+                        <div>
+                            <h1 class="text-3xl font-bold text-gray-800 bingo-font">Jogador: <span id="player-name-display"></span></h1>
+                            <p class="text-gray-600">Sala: <span id="player-room-name"></span> | Status: <span id="player-game-status" class="font-bold">Aguardando início</span></p>
+                        </div>
+                        <div class="mt-4 md:mt-0">
+                            <button onclick="leaveRoom()" class="bg-red-100 text-red-700 px-4 py-2 rounded-lg">
+                                <i class="fas fa-sign-out-alt mr-2"></i> Sair da Sala
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tela de Espera -->
+                <div id="player-waiting" class="glass rounded-2xl p-8 text-center">
+                    <div class="max-w-md mx-auto">
+                        <i class="fas fa-clock text-6xl text-blue-500 mb-6"></i>
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Aguardando início da partida</h2>
+                        <p class="text-gray-600 mb-6" id="waiting-message">O administrador irá iniciar o jogo em breve. Enquanto isso, confira as regras abaixo:</p>
+                        
+                        <div class="bg-blue-50 p-6 rounded-xl text-left mb-6">
+                            <h3 class="font-bold text-blue-700 mb-3 flex items-center">
+                                <i class="fas fa-info-circle mr-2"></i> Regras do Jogo
+                            </h3>
+                            <ul class="list-disc pl-5 space-y-2 text-gray-700">
+                                <li>Complete uma linha, coluna ou diagonal para gritar BINGO!</li>
+                                <li>O centro da cartela é grátis e conta automaticamente</li>
+                                <li>Quando fizer BINGO, clique no botão que aparecerá</li>
+                                <li>O administrador validará seu BINGO</li>
+                                <li>Em caso de empate, uma roleta de desempate será acionada</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="flex items-center justify-center space-x-4">
+                            <div class="bg-green-100 text-green-800 px-4 py-2 rounded-lg">
+                                <i class="fas fa-users mr-2"></i> Jogadores: <span id="waiting-player-count">1</span>
+                            </div>
+                            <div class="bg-purple-100 text-purple-800 px-4 py-2 rounded-lg">
+                                <i class="fas fa-hourglass-half mr-2"></i> Aguardando admin...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tela de Jogo Ativo -->
+                <div id="player-game" class="hidden">
+                    <div class="grid lg:grid-cols-3 gap-6">
+                        <!-- Cartela do Jogador -->
+                        <div class="lg:col-span-2">
+                            <div class="glass rounded-2xl p-6">
+                                <div class="flex justify-between items-center mb-6">
+                                    <h2 class="text-2xl font-bold text-gray-800">Sua Cartela</h2>
+                                    <div class="flex space-x-2">
+                                        <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-lg">
+                                            Marcados: <span id="marked-count">0</span>
+                                        </div>
+                                        <div class="bg-green-100 text-green-800 px-3 py-1 rounded-lg">
+                                            Sorteados: <span id="total-called">0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="overflow-x-auto">
+                                    <table class="bingo-table mx-auto">
+                                        <thead>
+                                            <tr>
+                                                <th class="letter-header p-3">B<br><span class="text-xs">1-15</span></th>
+                                                <th class="letter-header p-3">I<br><span class="text-xs">16-30</span></th>
+                                                <th class="letter-header p-3">N<br><span class="text-xs">31-45</span></th>
+                                                <th class="letter-header p-3">G<br><span class="text-xs">46-60</span></th>
+                                                <th class="letter-header p-3">O<br><span class="text-xs">61-75</span></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="player-bingo-card">
+                                            <!-- Cartela do jogador será gerada aqui -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <div class="mt-8 text-center">
+                                    <button id="bingo-btn" onclick="declareBingo()" class="bg-gradient-to-r from-yellow-400 to-red-500 text-white text-xl font-bold py-4 px-8 rounded-xl hover:opacity-90 hidden pulse">
+                                        🎉 BINGO! CLIQUE AQUI 🎉
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Painel de Informações -->
+                        <div class="lg:col-span-1">
+                            <!-- Bola Atual -->
+                            <div class="glass rounded-2xl p-6 mb-6">
+                                <h3 class="text-xl font-bold text-gray-700 mb-4">Última Bola</h3>
+                                <div class="flex justify-center mb-4">
+                                    <div id="player-current-ball" class="ball bg-gradient-to-br from-yellow-400 to-orange-500 text-white text-3xl">
+                                        --
+                                    </div>
+                                </div>
+                                <p class="text-center text-gray-600">Aguardando próximo sorteio...</p>
+                            </div>
+                            
+                            <!-- Números Recentes -->
+                            <div class="glass rounded-2xl p-6">
+                                <h3 class="text-xl font-bold text-gray-700 mb-4">Últimos Números</h3>
+                                <div id="recent-numbers" class="flex flex-wrap gap-2 justify-center">
+                                    <!-- Últimos números serão mostrados aqui -->
+                                </div>
+                                <div class="mt-4">
+                                    <h4 class="font-bold text-gray-700 mb-2">Próximos Prêmios</h4>
+                                    <div class="space-y-2">
+                                        <div class="flex items-center justify-between">
+                                            <span>1ª Linha Completa</span>
+                                            <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">R$ 50</span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span>Cartela Cheia</span>
+                                            <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-sm">R$ 200</span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span>Quatro Cantos</span>
+                                            <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">R$ 100</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tela de Vitória -->
+                <div id="player-win" class="hidden">
+                    <div class="glass rounded-2xl p-8 text-center max-w-2xl mx-auto">
+                        <div class="winner-banner text-white py-4 px-6 rounded-xl mb-6">
+                            <i class="fas fa-trophy text-4xl mb-4"></i>
+                            <h2 class="text-3xl font-bold">🎉 PARABÉNS! 🎉</h2>
+                            <p class="text-xl">Você fez BINGO!</p>
+                        </div>
+                        
+                        <p class="text-gray-700 mb-6">Aguarde a validação do administrador. Seu BINGO será verificado e, se correto, você será declarado vencedor!</p>
+                        
+                        <div class="bg-yellow-50 p-6 rounded-xl mb-6">
+                            <h3 class="font-bold text-yellow-700 mb-3">Status da Validação</h3>
+                            <div class="flex items-center justify-center mb-4">
+                                <div class="w-full bg-gray-200 rounded-full h-4">
+                                    <div id="validation-progress" class="bg-green-600 h-4 rounded-full w-0 transition-all duration-1000"></div>
+                                </div>
+                            </div>
+                            <p id="validation-text" class="text-gray-700">Validando cartela...</p>
+                        </div>
+                        
+                        <div id="tie-breaker-section" class="hidden">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4">🏆 Desempate! 🏆</h3>
+                            <p class="text-gray-700 mb-4">Vários jogadores fizeram BINGO ao mesmo tempo. Um número aleatório será sorteado para cada um.</p>
+                            <div class="flex justify-center mb-6">
+                                <div id="tie-breaker-wheel" class="w-32 h-32 rounded-full border-8 border-purple-500 flex items-center justify-center text-2xl font-bold tie-breaker-wheel">
+                                    ?
+                                </div>
+                            </div>
+                            <p id="tie-breaker-result" class="text-gray-700"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Notificações -->
+    <div id="notification-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="glass rounded-2xl p-6 max-w-md w-full">
+            <div class="text-center mb-6">
+                <i id="modal-icon" class="fas fa-info-circle text-5xl text-blue-500 mb-4"></i>
+                <h3 id="modal-title" class="text-2xl font-bold text-gray-800"></h3>
+                <p id="modal-message" class="text-gray-600 mt-2"></p>
+            </div>
+            <div class="flex justify-center">
+                <button onclick="closeModal()" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700">
+                    OK
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confetti Canvas -->
+    <canvas id="confetti-canvas" class="confetti hidden"></canvas>
+
+    <script>
+        // Estado global do jogo
+        const gameState = {
+            isAdmin: false,
+            roomId: null,
+            roomName: '',
+            playerId: null,
+            playerName: '',
+            gameStatus: 'waiting', // waiting, playing, paused, finished
+            drawnNumbers: [],
+            currentBall: null,
+            players: [],
+            bingoCard: null,
+            socket: null,
+            hasBingo: false,
+            isWinner: false
+        };
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            // Gerar QR code de exemplo
+            generateDemoQR();
+            
+            // Simular um backend WebSocket
+            initializeMockWebSocket();
+        });
+
+        function generateDemoQR() {
+            const qrCodeDiv = document.getElementById('demo-qr');
+            if (qrCodeDiv && typeof QRCode !== 'undefined') {
+                new QRCode(qrCodeDiv, {
+                    text: 'https://wcorsini79.github.io/bingo-digital/join/ABC123',
+                    width: 128,
+                    height: 128,
+                    colorDark: "#000000",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            }
+        }
+
+        function initializeMockWebSocket() {
+            // Em um projeto real, aqui seria a conexão com o servidor Socket.IO
+            console.log('WebSocket mock inicializado');
+            
+            // Simular eventos após um delay
+            setTimeout(() => {
+                // Preencher números sorteados de exemplo
+                for (let i = 1; i <= 15; i++) {
+                    if (Math.random() > 0.7) {
+                        gameState.drawnNumbers.push(i);
+                    }
+                }
+                
+                // Gerar cartela de exemplo para demonstração
+                if (document.getElementById('sample-card')) {
+                    generateSampleCard();
+                }
+                
+                // Preencher números sorteados na tela admin
+                updateDrawnNumbersDisplay();
+            }, 1000);
+        }
+
+        // Funções de Navegação
+        function showScreen(screenId) {
+            document.getElementById('landing-screen').classList.add('hidden');
+            document.getElementById('admin-screen').classList.add('hidden');
+            document.getElementById('player-screen').classList.add('hidden');
+            
+            document.getElementById(screenId).classList.remove('hidden');
+        }
+
+        function createRoom() {
+            const roomName = document.getElementById('room-name').value;
+            const gameType = document.getElementById('game-type').value;
+            
+            if (!roomName.trim()) {
+                showNotification('Erro', 'Digite um nome para a sala', 'error');
+                return;
+            }
+            
+            // Gerar código da sala aleatório
+            const roomCode = generateRoomCode();
+            gameState.isAdmin = true;
+            gameState.roomId = roomCode;
+            gameState.roomName = roomName;
+            gameState.gameType = gameType;
+            
+            // Atualizar tela admin
+            document.getElementById('current-room-name').textContent = roomName;
+            document.getElementById('current-room-code').textContent = roomCode;
+            
+            // Gerar QR code para a sala
+            generateRoomQRCode(roomCode);
+            
+            // Mostrar tela admin
+            showScreen('admin-screen');
+            
+            // Simular conexão de jogadores
+            simulatePlayersJoining();
+            
+            showNotification('Sucesso!', `Sala "${roomName}" criada com sucesso! Código: ${roomCode}`, 'success');
+        }
+
+        function generateRoomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
+
+        function generateRoomQRCode(roomCode) {
+            const qrDiv = document.getElementById('qr-code-admin');
+            qrDiv.innerHTML = '';
+            
+            // URL da sala (em produção seria a URL real)
+            const roomUrl = `${window.location.origin}/join/${roomCode}`;
+            
+            if (typeof QRCode !== 'undefined') {
+                new QRCode(qrDiv, {
+                    text: roomUrl,
+                    width: 180,
+                    height: 180,
+                    colorDark: "#1f2937",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            } else {
+                qrDiv.innerHTML = `<div class="text-center p-4 border-2 border-dashed border-gray-300 rounded-lg">
+                    <p class="font-mono font-bold text-lg">${roomCode}</p>
+                    <p class="text-sm text-gray-600 mt-2">Código da Sala</p>
+                </div>`;
+            }
+        }
+
+        function joinRoom() {
+            const roomCode = document.getElementById('room-code').value.toUpperCase();
+            const firstName = document.getElementById('player-firstname').value;
+            const lastName = document.getElementById('player-lastname').value;
+            
+            if (!roomCode || roomCode.length !== 6) {
+                showNotification('Erro', 'Digite um código de sala válido (6 caracteres)', 'error');
+                return;
+            }
+            
+            if (!firstName.trim() || !lastName.trim()) {
+                showNotification('Erro', 'Digite seu nome e sobrenome', 'error');
+                return;
+            }
+            
+            gameState.isAdmin = false;
+            gameState.roomId = roomCode;
+            gameState.playerName = `${firstName} ${lastName}`;
+            
+            // Atualizar tela do jogador
+            document.getElementById('player-name-display').textContent = gameState.playerName;
+            document.getElementById('player-room-name').textContent = roomCode;
+            
+            // Mostrar tela do jogador
+            showScreen('player-screen');
+            
+            // Simular entrada na sala
+            simulatePlayerJoined();
+            
+            showNotification('Bem-vindo!', `Você entrou na sala ${roomCode}`, 'success');
+        }
+
+        function simulatePlayersJoining() {
+            // Jogadores de exemplo
+            const samplePlayers = [
+                { name: 'Maria Silva', joined: 'há 2 min' },
+                { name: 'João Santos', joined: 'há 1 min' },
+                { name: 'Ana Oliveira', joined: 'agora' },
+                { name: 'Pedro Costa', joined: 'há 30 seg' }
+            ];
+            
+            const playersList = document.getElementById('players-list');
+            playersList.innerHTML = '';
+            
+            samplePlayers.forEach((player, index) => {
+                const playerElement = document.createElement('div');
+                playerElement.className = 'player-card bg-white p-4 rounded-xl shadow';
+                playerElement.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold mr-3">
+                                ${player.name.charAt(0)}
+                            </div>
+                            <div>
+                                <p class="font-medium">${player.name}</p>
+                                <p class="text-sm text-gray-500">${player.joined}</p>
+                            </div>
+                        </div>
+                        <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Online</span>
+                    </div>
+                `;
+                playersList.appendChild(playerElement);
+            });
+            
+            document.getElementById('player-count').textContent = samplePlayers.length;
+        }
+
+        function simulatePlayerJoined() {
+            // Atualizar contador na tela de espera
+            document.getElementById('waiting-player-count').textContent = Math.floor(Math.random() * 10) + 4;
+            
+            // Gerar cartela de exemplo para o jogador
+            setTimeout(() => {
+                generatePlayerBingoCard();
+            }, 1500);
+        }
+
+        function startGame() {
+            const startBtn = document.getElementById('start-game-btn');
+            const nextBallBtn = document.getElementById('next-ball-btn');
+            
+            startBtn.disabled = true;
+            startBtn.classList.add('hidden');
+            nextBallBtn.classList.remove('hidden');
+            
+            gameState.gameStatus = 'playing';
+            document.getElementById('game-status').innerHTML = 'Status: <span class="font-bold text-green-600">Jogo em andamento</span>';
+            document.getElementById('player-game-status').innerHTML = '<span class="text-green-600">Jogo em andamento</span>';
+            
+            // Esconder tela de espera e mostrar jogo
+            document.getElementById('player-waiting').classList.add('hidden');
+            document.getElementById('player-game').classList.remove('hidden');
+            
+            showNotification('Jogo Iniciado!', 'A partida começou! Boa sorte a todos!', 'success');
+            
+            // Simular início para todos os jogadores
+            if (!gameState.isAdmin) {
+                // Gerar cartela para o jogador
+                generatePlayerBingoCard();
+            }
+        }
+
+        function drawNextBall() {
+            if (gameState.drawnNumbers.length >= 75) {
+                showNotification('Fim do Jogo', 'Todos os números foram sorteados!', 'info');
+                return;
+            }
+            
+            // Sortear um número não repetido
+            let newBall;
+            do {
+                newBall = Math.floor(Math.random() * 75) + 1;
+            } while (gameState.drawnNumbers.includes(newBall));
+            
+            gameState.drawnNumbers.push(newBall);
+            gameState.currentBall = newBall;
+            
+            // Atualizar displays
+            updateBallDisplay(newBall);
+            updateDrawnNumbersDisplay();
+            updatePlayerCard(newBall);
+            
+            // Verificar se alguém fez bingo (simulação)
+            if (gameState.drawnNumbers.length > 10 && Math.random() > 0.8 && !gameState.isAdmin) {
+                setTimeout(() => {
+                    simulateBingo();
+                }, 1000);
+            }
+        }
+
+        function updateBallDisplay(ball) {
+            const ballElement = document.getElementById('current-ball');
+            const playerBallElement = document.getElementById('player-current-ball');
+            
+            ballElement.textContent = ball;
+            ballElement.classList.add('bounce');
+            
+            if (playerBallElement) {
+                playerBallElement.textContent = ball;
+                playerBallElement.classList.add('bounce');
+            }
+            
+            // Adicionar aos números recentes
+            const recentNumbers = document.getElementById('recent-numbers');
+            if (recentNumbers) {
+                const span = document.createElement('span');
+                span.className = 'ball bg-gradient-to-br from-blue-400 to-purple-500 text-white';
+                span.textContent = ball;
+                recentNumbers.prepend(span);
+                
+                // Manter apenas os últimos 8 números
+                if (recentNumbers.children.length > 8) {
+                    recentNumbers.removeChild(recentNumbers.lastChild);
+                }
+            }
+            
+            setTimeout(() => {
+                ballElement.classList.remove('bounce');
+                if (playerBallElement) playerBallElement.classList.remove('bounce');
+            }, 500);
+        }
+
+        function updateDrawnNumbersDisplay() {
+            const drawnNumbersDiv = document.getElementById('drawn-numbers');
+            const totalDrawnSpan = document.getElementById('total-drawn');
+            const totalCalledSpan = document.getElementById('total-called');
+            
+            if (drawnNumbersDiv) {
+                drawnNumbersDiv.innerHTML = '';
+                
+                for (let i = 1; i <= 75; i++) {
+                    const div = document.createElement('div');
+                    div.className = 'number-item';
+                    div.textContent = i;
+                    
+                    if (gameState.drawnNumbers.includes(i)) {
+                        div.classList.add('called');
+                        if (i === gameState.currentBall) {
+                            div.classList.add('current');
+                        }
+                    }
+                    
+                    drawnNumbersDiv.appendChild(div);
+                }
+            }
+            
+            if (totalDrawnSpan) {
+                totalDrawnSpan.textContent = gameState.drawnNumbers.length;
+            }
+            
+            if (totalCalledSpan) {
+                totalCalledSpan.textContent = gameState.drawnNumbers.length;
+            }
+        }
+
+        function generateSampleCard() {
+            const sampleCard = document.getElementById('sample-card');
+            if (!sampleCard) return;
+            
+            sampleCard.innerHTML = '';
+            
+            // Gerar números para cada coluna BINGO
+            const ranges = {
+                B: [1, 15],
+                I: [16, 30],
+                N: [31, 45],
+                G: [46, 60],
+                O: [61, 75]
+            };
+            
+            const cardNumbers = {};
+            Object.keys(ranges).forEach(letter => {
+                const [min, max] = ranges[letter];
+                const numbers = new Set();
+                while (numbers.size < 5) {
+                    numbers.add(Math.floor(Math.random() * (max - min + 1)) + min);
+                }
+                cardNumbers[letter] = Array.from(numbers);
+            });
+            
+            // FREE no centro
+            cardNumbers['N'][2] = 'FREE';
+            
+            // Renderizar cartela
+            for (let row = 0; row < 5; row++) {
+                const tr = document.createElement('tr');
+                
+                Object.keys(cardNumbers).forEach(letter => {
+                    const td = document.createElement('td');
+                    const number = cardNumbers[letter][row];
+                    
+                    td.className = 'bingo-cell';
+                    td.textContent = number;
+                    
+                    if (number === 'FREE') {
+                        td.classList.add('free');
+                        td.innerHTML = '<div class="text-center"><div class="font-bold">FREE</div><div class="text-xs">🆓</div></div>';
+                    } else if (gameState.drawnNumbers.includes(number)) {
+                        td.classList.add('marked');
+                    }
+                    
+                    tr.appendChild(td);
+                });
+                
+                sampleCard.appendChild(tr);
+            }
+        }
+
+        function generatePlayerBingoCard() {
+            const playerCard = document.getElementById('player-bingo-card');
+            if (!playerCard) return;
+            
+            playerCard.innerHTML = '';
+            
+            // Gerar números para cada coluna BINGO
+            const ranges = {
+                B: [1, 15],
+                I: [16, 30],
+                N: [31, 45],
+                G: [46, 60],
+                O: [61, 75]
+            };
+            
+            gameState.bingoCard = {};
+            Object.keys(ranges).forEach(letter => {
+                const [min, max] = ranges[letter];
+                const numbers = new Set();
+                while (numbers.size < 5) {
+                    numbers.add(Math.floor(Math.random() * (max - min + 1)) + min);
+                }
+                gameState.bingoCard[letter] = Array.from(numbers);
+            });
+            
+            // FREE no centro
+            gameState.bingoCard['N'][2] = 'FREE';
+            
+            // Renderizar cartela
+            for (let row = 0; row < 5; row++) {
+                const tr = document.createElement('tr');
+                
+                Object.keys(gameState.bingoCard).forEach(letter => {
+                    const td = document.createElement('td');
+                    const number = gameState.bingoCard[letter][row];
+                    
+                    td.className = 'bingo-cell';
+                    td.onclick = () => toggleNumber(number, td);
+                    
+                    if (number === 'FREE') {
+                        td.classList.add('free');
+                        td.innerHTML = '<div class="text-center"><div class="font-bold">FREE</div><div class="text-xs">🆓</div></div>';
+                    } else {
+                        td.textContent = number;
+                        if (gameState.drawnNumbers.includes(number)) {
+                            td.classList.add('marked');
+                        }
+                    }
+                    
+                    tr.appendChild(td);
+                });
+                
+                playerCard.appendChild(tr);
+            }
+            
+            updateMarkedCount();
+        }
+
+        function updatePlayerCard(newBall) {
+            if (!gameState.bingoCard) return;
+            
+            // Verificar se o número está na cartela
+            let isInCard = false;
+            Object.values(gameState.bingoCard).forEach(column => {
+                column.forEach(number => {
+                    if (number === newBall) {
+                        isInCard = true;
+                    }
+                });
+            });
+            
+            if (isInCard) {
+                // Atualizar visual da cartela
+                const cells = document.querySelectorAll('#player-bingo-card .bingo-cell');
+                cells.forEach(cell => {
+                    if (parseInt(cell.textContent) === newBall) {
+                        cell.classList.add('marked');
+                    }
+                });
+                
+                updateMarkedCount();
+                checkForBingo();
+            }
+        }
+
+        function updateMarkedCount() {
+            const markedCells = document.querySelectorAll('#player-bingo-card .bingo-cell.marked').length;
+            const freeCell = document.querySelector('#player-bingo-card .bingo-cell.free');
+            
+            let markedCount = markedCells;
+            if (freeCell) markedCount += 1; // FREE conta como marcado
+            
+            document.getElementById('marked-count').textContent = markedCount;
+            
+            // Mostrar botão BINGO se tiver pelo menos 5 marcados
+            const bingoBtn = document.getElementById('bingo-btn');
+            if (markedCount >= 5) {
+                bingoBtn.classList.remove('hidden');
+            }
+        }
+
+        function checkForBingo() {
+            // Em um jogo real, aqui seria feita a validação completa do padrão BINGO
+            // Por simplicidade, vamos apenas verificar se tem muitas marcações
+            const markedCount = parseInt(document.getElementById('marked-count').textContent);
+            
+            if (markedCount >= 10 && Math.random() > 0.5) {
+                const bingoBtn = document.getElementById('bingo-btn');
+                bingoBtn.classList.add('pulse');
+            }
+        }
+
+        function toggleNumber(number, element) {
+            if (number === 'FREE') return;
+            
+            if (element.classList.contains('marked')) {
+                element.classList.remove('marked');
+            } else {
+                element.classList.add('marked');
+            }
+            
+            updateMarkedCount();
+            checkForBingo();
+        }
+
+        function declareBingo() {
+            if (gameState.hasBingo) return;
+            
+            gameState.hasBingo = true;
+            document.getElementById('bingo-btn').disabled = true;
+            
+            // Mostrar tela de vitória
+            document.getElementById('player-game').classList.add('hidden');
+            document.getElementById('player-win').classList.remove('hidden');
+            
+            // Iniciar animação de validação
+            simulateValidation();
+            
+            // Em um jogo real, aqui seria enviado um evento WebSocket para o servidor
+            showNotification('BINGO Declarado!', 'Aguardando validação do administrador...', 'info');
+        }
+
+        function simulateValidation() {
+            const progressBar = document.getElementById('validation-progress');
+            const validationText = document.getElementById('validation-text');
+            
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 10;
+                progressBar.style.width = `${progress}%`;
+                
+                if (progress <= 30) {
+                    validationText.textContent = 'Verificando cartela...';
+                } else if (progress <= 60) {
+                    validationText.textContent = 'Confirmando números...';
+                } else if (progress <= 90) {
+                    validationText.textContent = 'Validando padrão BINGO...';
+                } else {
+                    validationText.textContent = 'Validação completa!';
+                    clearInterval(interval);
+                    
+                    // Verificar se há empate (30% de chance)
+                    if (Math.random() > 0.7) {
+                        setTimeout(() => {
+                            simulateTieBreaker();
+                        }, 1000);
+                    } else {
+                        setTimeout(() => {
+                            showWinConfetti();
+                            validationText.innerHTML = '<span class="text-green-600 font-bold">✅ BINGO VÁLIDO! Você é o vencedor!</span>';
+                        }, 500);
+                    }
+                }
+            }, 200);
+        }
+
+        function simulateTieBreaker() {
+            const tieBreakerSection = document.getElementById('tie-breaker-section');
+            const tieBreakerResult = document.getElementById('tie-breaker-result');
+            const wheel = document.getElementById('tie-breaker-wheel');
+            
+            tieBreakerSection.classList.remove('hidden');
+            
+            // Girar a roleta
+            wheel.textContent = '?';
+            wheel.classList.add('tie-breaker-wheel');
+            
+            setTimeout(() => {
+                const tieNumber = Math.floor(Math.random() * 75) + 1;
+                wheel.textContent = tieNumber;
+                wheel.classList.remove('tie-breaker-wheel');
+                
+                // 70% de chance de vencer no desempate
+                if (Math.random() > 0.3) {
+                    tieBreakerResult.innerHTML = `<span class="text-green-600 font-bold">🎉 Seu número (${tieNumber}) é maior! Você venceu o desempate!</span>`;
+                    setTimeout(() => {
+                        showWinConfetti();
+                    }, 1000);
+                } else {
+                    tieBreakerResult.innerHTML = `<span class="text-red-600 font-bold">😔 Seu número (${tieNumber}) não foi o maior. Outro jogador venceu.</span>`;
+                }
+            }, 3000);
+        }
+
+        function showWinConfetti() {
+            const canvas = document.getElementById('confetti-canvas');
+            canvas.classList.remove('hidden');
+            
+            const confettiSettings = { target: 'confetti-canvas', max: 150, size: 1.2 };
+            const confetti = new ConfettiGenerator(confettiSettings);
+            confetti.render();
+            
+            // Parar confetti após 5 segundos
+            setTimeout(() => {
+                confetti.clear();
+                canvas.classList.add('hidden');
+            }, 5000);
+        }
+
+        function simulateBingo() {
+            // Simular que outro jogador fez BINGO
+            if (!gameState.isAdmin && !gameState.hasBingo) {
+                showNotification('Outro Jogador', 'Um jogador fez BINGO! Aguarde validação...', 'warning');
+            }
+        }
+
+        function copyRoomLink() {
+            const roomCode = document.getElementById('current-room-code').textContent;
+            const roomLink = `${window.location.origin}/join/${roomCode}`;
+            
+            navigator.clipboard.writeText(roomLink).then(() => {
+                showNotification('Link Copiado!', 'O link da sala foi copiado para a área de transferência.', 'success');
+            });
+        }
+
+        function refreshQR() {
+            const roomCode = document.getElementById('current-room-code').textContent;
+            generateRoomQRCode(roomCode);
+            showNotification('QR Code Atualizado', 'O QR Code foi gerado novamente.', 'info');
+        }
+
+        function endGame() {
+            if (confirm('Tem certeza que deseja encerrar o jogo? Todos os jogadores serão desconectados.')) {
+                showNotification('Jogo Encerrado', 'A partida foi finalizada. Obrigado por jogar!', 'info');
+                setTimeout(() => {
+                    showScreen('landing-screen');
+                    resetGameState();
+                }, 2000);
+            }
+        }
+
+        function leaveRoom() {
+            if (confirm('Deseja realmente sair da sala?')) {
+                showNotification('Até logo!', 'Você saiu da sala.', 'info');
+                setTimeout(() => {
+                    showScreen('landing-screen');
+                    resetGameState();
+                }, 1500);
+            }
+        }
+
+        function resetGameState() {
+            gameState.isAdmin = false;
+            gameState.roomId = null;
+            gameState.roomName = '';
+            gameState.playerId = null;
+            gameState.playerName = '';
+            gameState.gameStatus = 'waiting';
+            gameState.drawnNumbers = [];
+            gameState.currentBall = null;
+            gameState.players = [];
+            gameState.bingoCard = null;
+            gameState.hasBingo = false;
+            gameState.isWinner = false;
+        }
+
+        function showNotification(title, message, type = 'info') {
+            const modal = document.getElementById('notification-modal');
+            const modalIcon = document.getElementById('modal-icon');
+            const modalTitle = document.getElementById('modal-title');
+            const modalMessage = document.getElementById('modal-message');
+            
+            // Definir ícone baseado no tipo
+            switch(type) {
+                case 'success':
+                    modalIcon.className = 'fas fa-check-circle text-5xl text-green-500 mb-4';
+                    break;
+                case 'error':
+                    modalIcon.className = 'fas fa-exclamation-circle text-5xl text-red-500 mb-4';
+                    break;
+                case 'warning':
+                    modalIcon.className = 'fas fa-exclamation-triangle text-5xl text-yellow-500 mb-4';
+                    break;
+                default:
+                    modalIcon.className = 'fas fa-info-circle text-5xl text-blue-500 mb-4';
+            }
+            
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('notification-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // Fechar modal ao clicar fora
+        document.getElementById('notification-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+    </script>
+    
+    <footer class="bg-gray-900 text-white py-6 mt-8">
+        <div class="max-w-6xl mx-auto px-4 text-center">
+            <p class="text-lg font-semibold mb-2">Bingo Digital - Jogo Online em Tempo Real</p>
+            <p class="text-gray-400 mb-4">Desenvolvido por wcorsini79 | Stack: React + Node.js + Socket.IO + TailwindCSS</p>
+            <div class="flex justify-center space-x-6">
+                <a href="https://github.com/wcorsini79" class="text-gray-400 hover:text-white transition">
+                    <i class="fab fa-github text-2xl"></i>
+                </a>
+                <a href="#" class="text-gray-400 hover:text-white transition">
+                    <i class="fas fa-gamepad text-2xl"></i>
+                </a>
+                <a href="#" class="text-gray-400 hover:text-white transition">
+                    <i class="fas fa-question-circle text-2xl"></i>
+                </a>
+            </div>
+            <p class="text-gray-500 text-sm mt-4">© 2024 Bingo Digital. Todos os direitos reservados.</p>
+        </div>
+    </footer>
+</body>
+</html>
