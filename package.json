@@ -1,0 +1,25 @@
+{
+  "name": "bingo",
+  "version": "1.0.0",
+  "description": "A BINGO game application",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "build": "webpack",
+    "serve": "webpack serve"
+  },
+  "keywords": [
+    "bingo",
+    "game",
+    "javascript"
+  ],
+  "author": "wcorsini79",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}
