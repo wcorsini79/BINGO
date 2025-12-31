@@ -1,0 +1,9 @@
+{
+  "query": "DROP TABLE IF EXISTS cards; DROP TABLE IF EXISTS players; DROP TABLE IF EXISTS rooms;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6sMPE7sHHF9GcQV.root --database 5Pep8zcoAxDbDQNPvGJM3U --execute DROP TABLE IF EXISTS cards; DROP TABLE IF EXISTS players; DROP TABLE IF EXISTS rooms;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1870
+}
